@@ -44,7 +44,7 @@ func (s *structCacheMap) Set(key reflect.Type, value *cachedStruct) {
 	s.m.Store(nm)
 }
 
-func (s *structCacheMap) parseStruct(current reflect.Value, key reflect.Type, tagName string) *cachedStruct {
+func (s *structCacheMap) parseStruct(key reflect.Type, tagName string) *cachedStruct {
 
 	s.lock.Lock()
 
@@ -56,17 +56,16 @@ func (s *structCacheMap) parseStruct(current reflect.Value, key reflect.Type, ta
 		return cs
 	}
 
-	typ := current.Type()
 	cs = &cachedStruct{fields: make([]cachedField, 0, 4)} // init 4, betting most structs decoding into have at aleast 4 fields.
 
-	numFields := current.NumField()
+	numFields := key.NumField()
 
 	var fld reflect.StructField
 	var name string
 
 	for i := 0; i < numFields; i++ {
 
-		fld = typ.Field(i)
+		fld = key.Field(i)
 
 		if fld.PkgPath != blank && !fld.Anonymous {
 			continue
@@ -83,7 +82,7 @@ func (s *structCacheMap) parseStruct(current reflect.Value, key reflect.Type, ta
 		cs.fields = append(cs.fields, cachedField{idx: i, name: name})
 	}
 
-	s.Set(typ, cs)
+	s.Set(key, cs)
 
 	s.lock.Unlock()
 

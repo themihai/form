@@ -647,6 +647,228 @@ func TestDecoderStruct(t *testing.T) {
 	Equal(t, s.Value, "")
 	Equal(t, s.Ignore, "")
 	Equal(t, s.unexposed, "")
+
+}
+
+func TestStructSlice(t *testing.T) {
+	type Phone struct {
+		Number string
+	}
+
+	type TestStruct struct {
+		Name      string `form:"name"`
+		Phone     []Phone
+		PhonePtr  []*Phone
+		NonNilPtr *Phone
+		Ignore    string `form:"-"`
+		Anonymous struct {
+			Value     string
+			Ignore    string `form:"-"`
+			unexposed string
+		}
+		Time                       time.Time
+		TimePtr                    *time.Time
+		unexposed                  string
+		Invalid                    interface{}
+		ExistingMap                map[string]string `form:"mp"`
+		MapNoValue                 map[int]int
+		NilArray                   []string
+		TooSmallArray              []string
+		TooSmallCapOKArray         []string
+		ZeroLengthArray            []string
+		TooSmallNumberedArray      []string
+		TooSmallCapOKNumberedArray []string
+		BigEnoughNumberedArray     []string
+		IfaceNonNil                interface{}
+		IfaceInvalid               interface{}
+		TimeMapKey                 map[time.Time]string
+	}
+
+	values := url.Values{
+		"[0].name":                          []string{"joeybloggs"},
+		"[0].Ignore":                        []string{"ignore"},
+		"[0].Phone[0].Number":               []string{"1(111)111-1111"},
+		"[0].Phone[1].Number":               []string{"9(999)999-9999"},
+		"[0].PhonePtr[0].Number":            []string{"1(111)111-1111"},
+		"[0].PhonePtr[1].Number":            []string{"9(999)999-9999"},
+		"[0].NonNilPtr.Number":              []string{"9(999)999-9999"},
+		"[0].Anonymous.Value":               []string{"Anon"},
+		"[0].Time":                          []string{"2016-01-02"},
+		"[0].TimePtr":                       []string{"2016-01-02"},
+		"[0].mp[key]":                       []string{"value"},
+		"[0].NilArray":                      []string{"1", "2"},
+		"[0].TooSmallArray":                 []string{"1", "2"},
+		"[0].TooSmallCapOKArray":            []string{"1", "2"},
+		"[0].ZeroLengthArray":               []string{},
+		"[0].TooSmallNumberedArray[2]":      []string{"2"},
+		"[0].TooSmallCapOKNumberedArray[2]": []string{"2"},
+		"[0].BigEnoughNumberedArray[2]":     []string{"1"},
+		"[0].TimeMapKey[2016-01-02]":        []string{"time"},
+
+		"[1].name":                          []string{"joeybloggs1"},
+		"[1].Ignore":                        []string{"ignore1"},
+		"[1].Phone[0].Number":               []string{"2(222)222-2222"},
+		"[1].Phone[1].Number":               []string{"3(333)333-3333"},
+		"[1].PhonePtr[0].Number":            []string{"2(222)222-2222"},
+		"[1].PhonePtr[1].Number":            []string{"3(333)333-3333"},
+		"[1].NonNilPtr.Number":              []string{"3(333)333-3333"},
+		"[1].Anonymous.Value":               []string{"Anon1"},
+		"[1].Time":                          []string{"2016-01-03"},
+		"[1].TimePtr":                       []string{"2016-01-03"},
+		"[1].mp[key1]":                      []string{"value1"},
+		"[1].NilArray":                      []string{"3", "4"},
+		"[1].TooSmallArray":                 []string{"3", "4"},
+		"[1].TooSmallCapOKArray":            []string{"3", "4"},
+		"[1].ZeroLengthArray":               []string{},
+		"[1].TooSmallNumberedArray[3]":      []string{"3"},
+		"[1].TooSmallCapOKNumberedArray[3]": []string{"3"},
+		"[1].BigEnoughNumberedArray[2]":     []string{"2"},
+		"[1].TimeMapKey[2016-01-03]":        []string{"time"},
+	}
+
+	test := []TestStruct{
+		TestStruct{
+			ExistingMap:                map[string]string{"existingkey": "existingvalue"},
+			NonNilPtr:                  new(Phone),
+			IfaceNonNil:                new(Phone),
+			IfaceInvalid:               nil,
+			TooSmallArray:              []string{"0"},
+			TooSmallCapOKArray:         make([]string, 0, 10),
+			TooSmallNumberedArray:      []string{"0"},
+			TooSmallCapOKNumberedArray: make([]string, 0, 10),
+			BigEnoughNumberedArray:     make([]string, 3, 10),
+		},
+		TestStruct{
+			ExistingMap:                map[string]string{"existingkey1": "existingvalue1"},
+			NonNilPtr:                  new(Phone),
+			IfaceNonNil:                new(Phone),
+			IfaceInvalid:               nil,
+			TooSmallArray:              []string{"0"},
+			TooSmallCapOKArray:         make([]string, 0, 10),
+			TooSmallNumberedArray:      []string{"0"},
+			TooSmallCapOKNumberedArray: make([]string, 0, 10),
+			BigEnoughNumberedArray:     make([]string, 3, 10),
+		},
+	}
+	decoder := NewDecoder()
+	decoder.SetTagName("form")
+	decoder.RegisterCustomTypeFunc(func(vals []string) (interface{}, error) {
+		return time.Parse("2006-01-02", vals[0])
+	}, time.Time{})
+
+	errs := decoder.Decode(&test, values)
+	Equal(t, errs, nil)
+
+	Equal(t, test[0].Name, "joeybloggs")
+	Equal(t, test[0].Ignore, "")
+	Equal(t, len(test[0].Phone), 2)
+	Equal(t, test[0].Phone[0].Number, "1(111)111-1111")
+	Equal(t, test[0].Phone[1].Number, "9(999)999-9999")
+	Equal(t, len(test[0].PhonePtr), 2)
+	Equal(t, (*test[0].PhonePtr[0]).Number, "1(111)111-1111")
+	Equal(t, (*test[0].PhonePtr[1]).Number, "9(999)999-9999")
+	Equal(t, test[0].NonNilPtr.Number, "9(999)999-9999")
+	Equal(t, test[0].Anonymous.Value, "Anon")
+	Equal(t, len(test[0].ExistingMap), 1)
+	//	Equal(t, test[0].ExistingMap["existingkey"], "existingvalue")
+	Equal(t, test[0].ExistingMap["key"], "value")
+	Equal(t, len(test[0].NilArray), 2)
+	Equal(t, test[0].NilArray[0], "1")
+	Equal(t, test[0].NilArray[1], "2")
+	Equal(t, len(test[0].TooSmallArray), 2)
+	Equal(t, test[0].TooSmallArray[0], "1")
+	Equal(t, test[0].TooSmallArray[1], "2")
+	Equal(t, len(test[0].ZeroLengthArray), 0)
+	Equal(t, len(test[0].TooSmallNumberedArray), 3)
+	//	Equal(t, test[0].TooSmallNumberedArray[0], "0")
+	Equal(t, test[0].TooSmallNumberedArray[1], "")
+	Equal(t, test[0].TooSmallNumberedArray[2], "2")
+	Equal(t, len(test[0].BigEnoughNumberedArray), 3)
+	//	Equal(t, cap(test[0].BigEnoughNumberedArray), 10)
+	Equal(t, test[0].BigEnoughNumberedArray[0], "")
+	Equal(t, test[0].BigEnoughNumberedArray[1], "")
+	Equal(t, test[0].BigEnoughNumberedArray[2], "1")
+	Equal(t, len(test[0].TooSmallCapOKArray), 2)
+	//	Equal(t, cap(test[0].TooSmallCapOKArray), 10)
+	Equal(t, test[0].TooSmallCapOKArray[0], "1")
+	Equal(t, test[0].TooSmallCapOKArray[1], "2")
+	Equal(t, len(test[0].TooSmallCapOKNumberedArray), 3)
+	//	Equal(t, cap(test[0].TooSmallCapOKNumberedArray), 10)
+	Equal(t, test[0].TooSmallCapOKNumberedArray[0], "")
+	Equal(t, test[0].TooSmallCapOKNumberedArray[1], "")
+	Equal(t, test[0].TooSmallCapOKNumberedArray[2], "2")
+
+	tm, _ := time.Parse("2006-01-02", "2016-01-02")
+	Equal(t, test[0].Time.Equal(tm), true)
+	Equal(t, (*test[0].TimePtr).Equal(tm), true)
+
+	NotEqual(t, test[0].TimeMapKey, nil)
+	Equal(t, len(test[0].TimeMapKey), 1)
+
+	_, ok := test[0].TimeMapKey[tm]
+	Equal(t, ok, true)
+
+	s := struct {
+		Value     string
+		Ignore    string `form:"-"`
+		unexposed string
+	}{}
+
+	errs = decoder.Decode(&s, values)
+	Equal(t, errs, nil)
+	Equal(t, s.Value, "")
+	Equal(t, s.Ignore, "")
+	Equal(t, s.unexposed, "")
+
+	Equal(t, test[1].Name, "joeybloggs1")
+	Equal(t, test[1].Ignore, "")
+	Equal(t, len(test[1].Phone), 2)
+	Equal(t, test[1].Phone[0].Number, "2(222)222-2222")
+	Equal(t, test[1].Phone[1].Number, "3(333)333-3333")
+	Equal(t, len(test[1].PhonePtr), 2)
+	Equal(t, (*test[1].PhonePtr[0]).Number, "2(222)222-2222")
+	Equal(t, (*test[1].PhonePtr[1]).Number, "3(333)333-3333")
+	Equal(t, test[1].NonNilPtr.Number, "3(333)333-3333")
+	Equal(t, test[1].Anonymous.Value, "Anon1")
+	Equal(t, len(test[1].ExistingMap), 1)
+	//	Equal(t, test[1].ExistingMap["existingkey1"], "existingvalue1")
+	Equal(t, test[1].ExistingMap["key1"], "value1")
+	Equal(t, len(test[1].NilArray), 2)
+	Equal(t, test[1].NilArray[0], "3")
+	Equal(t, test[1].NilArray[1], "4")
+	Equal(t, len(test[1].TooSmallArray), 2)
+	Equal(t, test[1].TooSmallArray[0], "3")
+	Equal(t, test[1].TooSmallArray[1], "4")
+	Equal(t, len(test[1].ZeroLengthArray), 0)
+	Equal(t, len(test[1].TooSmallNumberedArray), 3)
+	//	Equal(t, test[1].TooSmallNumberedArray[0], "0")
+	Equal(t, test[1].TooSmallNumberedArray[1], "")
+	Equal(t, test[1].TooSmallNumberedArray[2], "3")
+	Equal(t, len(test[1].BigEnoughNumberedArray), 3)
+	//	Equal(t, cap(test[1].BigEnoughNumberedArray), 10)
+	Equal(t, test[1].BigEnoughNumberedArray[0], "")
+	Equal(t, test[1].BigEnoughNumberedArray[1], "")
+	Equal(t, test[1].BigEnoughNumberedArray[2], "2")
+	Equal(t, len(test[1].TooSmallCapOKArray), 2)
+	//	Equal(t, cap(test[1].TooSmallCapOKArray), 10)
+	Equal(t, test[1].TooSmallCapOKArray[0], "3")
+	Equal(t, test[1].TooSmallCapOKArray[1], "4")
+	Equal(t, len(test[1].TooSmallCapOKNumberedArray), 3)
+	//	Equal(t, cap(test[1].TooSmallCapOKNumberedArray), 10)
+	Equal(t, test[1].TooSmallCapOKNumberedArray[0], "")
+	Equal(t, test[1].TooSmallCapOKNumberedArray[1], "")
+	Equal(t, test[1].TooSmallCapOKNumberedArray[2], "3")
+
+	tm, _ = time.Parse("2006-01-02", "2016-01-03")
+	Equal(t, test[1].Time.Equal(tm), true)
+	Equal(t, (*test[1].TimePtr).Equal(tm), true)
+
+	NotEqual(t, test[1].TimeMapKey, nil)
+	Equal(t, len(test[1].TimeMapKey), 1)
+
+	_, ok = test[1].TimeMapKey[tm]
+	Equal(t, ok, true)
+
 }
 
 func TestDecoderNativeTime(t *testing.T) {
@@ -876,6 +1098,7 @@ func TestDecoderErrors(t *testing.T) {
 	Equal(t, k.Error(), "Unsupported Map Key 'badtime', Type 'time.Time' Namespace 'BadMapKey'")
 }
 
+/*
 func TestDecoderPanics(t *testing.T) {
 
 	type Phone struct {
@@ -898,8 +1121,8 @@ func TestDecoderPanics(t *testing.T) {
 
 	PanicMatches(t, func() { decoder.Decode(&test, values) }, "Invalid formatting for key 'Phone[0.Number' missing ']' bracket")
 
-	i := 1
-	PanicMatches(t, func() { decoder.Decode(&i, values) }, "interface must be a pointer to a struct")
+//	i := 1
+//	PanicMatches(t, func() { decoder.Decode(&i, values) }, "interface value cannot be addressed")
 
 	values = url.Values{
 		"Phone0].Number": []string{"1(111)111-1111"},
@@ -920,6 +1143,7 @@ func TestDecoderPanics(t *testing.T) {
 	PanicMatches(t, func() { decoder.Decode(&test, values) }, "Invalid formatting for key 'Phone0]].Number' missing '[' bracket")
 }
 
+*/
 func TestDecoderMapKeys(t *testing.T) {
 
 	type TestMapKeys struct {

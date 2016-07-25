@@ -99,7 +99,6 @@ func (d *Decoder) Decode(v interface{}, values url.Values) (err error) {
 		d:      d,
 		values: values,
 	}
-
 	val := reflect.ValueOf(v)
 
 	kind := val.Kind()
@@ -109,10 +108,10 @@ func (d *Decoder) Decode(v interface{}, values url.Values) (err error) {
 	}
 
 	if kind != reflect.Ptr || val.Kind() != reflect.Struct {
-		panic("interface must be a pointer to a struct")
+		dec.setFieldByType(val, nil, 0)
+	} else {
+		dec.traverseStruct(val, make([]byte, 0, 64))
 	}
-
-	dec.traverseStruct(val, make([]byte, 0, 64))
 
 	if len(dec.dm) > 0 {
 		d.dataPool.Put(dec.dm)

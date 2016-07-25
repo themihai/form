@@ -74,6 +74,7 @@ func (d *decoder) parseMapData() {
 			case ']':
 
 				if !insideBracket {
+					log.Panicf("k %#v, v %#v", k, d.values)
 					log.Panicf(errMissingStartBracket, k)
 				}
 
@@ -138,7 +139,6 @@ func (d *decoder) parseMapData() {
 }
 
 func (d *decoder) traverseStruct(v reflect.Value, namespace []byte) (set bool) {
-
 	typ := v.Type()
 	l := len(namespace)
 	first := l == 0
@@ -147,7 +147,7 @@ func (d *decoder) traverseStruct(v reflect.Value, namespace []byte) (set bool) {
 	// including tags
 	s, ok := d.d.structCache.Get(typ)
 	if !ok {
-		s = d.d.structCache.parseStruct(v, typ, d.d.tagName)
+		s = d.d.structCache.parseStruct(typ, d.d.tagName)
 	}
 
 	for _, f := range s.fields {
@@ -387,113 +387,7 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		set = true
 
 	case reflect.Slice, reflect.Array:
-
-		if !ok {
-
-			d.parseMapData()
-
-			// maybe it's an numbered array i.e. Phone[0].Number
-			if rd := d.findAlias(string(namespace)); rd != nil {
-
-				var varr reflect.Value
-				var kv key
-
-				sl := rd.sliceLen + 1
-
-				// checking below for maxArraySize, but if array exists and already
-				// has sufficient capacity allocated then we do not check as the code
-				// obviously allows a capacity greater than the maxArraySize.
-
-				if v.IsNil() {
-
-					if sl > d.d.maxArraySize {
-						d.setError(namespace, fmt.Errorf(errArraySize, sl, d.d.maxArraySize))
-						return
-					}
-
-					varr = reflect.MakeSlice(v.Type(), sl, sl)
-
-				} else if v.Len() < sl {
-
-					if v.Cap() <= sl {
-
-						if sl > d.d.maxArraySize {
-							d.setError(namespace, fmt.Errorf(errArraySize, sl, d.d.maxArraySize))
-							return
-						}
-
-						varr = reflect.MakeSlice(v.Type(), sl, sl)
-					} else {
-						varr = reflect.MakeSlice(v.Type(), sl, v.Cap())
-					}
-
-					reflect.Copy(varr, v)
-
-				} else {
-					varr = v
-				}
-
-				for i := 0; i < len(rd.keys); i++ {
-
-					kv = rd.keys[i]
-					newVal := reflect.New(varr.Type().Elem()).Elem()
-
-					if kv.ivalue == -1 {
-						d.setError(namespace, fmt.Errorf("Invalid Array index '%s'", kv.value))
-						continue
-					}
-
-					if d.setFieldByType(newVal, append(namespace, kv.searchValue...), 0) {
-						set = true
-						varr.Index(kv.ivalue).Set(newVal)
-					}
-				}
-
-				if !set {
-					return
-				}
-
-				v.Set(varr)
-			}
-
-			return
-		}
-
-		if len(arr) == 0 {
-			return
-		}
-
-		var varr reflect.Value
-		var existing bool
-
-		if v.IsNil() {
-			varr = reflect.MakeSlice(v.Type(), len(arr), len(arr))
-		} else if v.Len() < len(arr) {
-			if v.Cap() <= len(arr) {
-				varr = reflect.MakeSlice(v.Type(), len(arr), len(arr))
-			} else {
-				varr = reflect.MakeSlice(v.Type(), len(arr), v.Cap())
-			}
-			reflect.Copy(varr, v)
-		} else {
-			existing = true
-			varr = v
-		}
-
-		for i := 0; i < len(arr); i++ {
-			newVal := reflect.New(v.Type().Elem()).Elem()
-
-			if d.setFieldByType(newVal, namespace, i) {
-				set = true
-				varr.Index(i).Set(newVal)
-			}
-		}
-
-		if !set || existing {
-			return
-		}
-
-		v.Set(varr)
+		set = d.setSliceByType(namespace, v, arr, ok)
 
 	case reflect.Map:
 
@@ -571,6 +465,116 @@ func (d *decoder) setFieldByType(current reflect.Value, namespace []byte, idx in
 		set = d.traverseStruct(v, namespace)
 	}
 
+	return
+}
+
+func (d *decoder) setSliceByType(namespace []byte, v reflect.Value, arr []string, ok bool) (set bool) {
+	if !ok {
+
+		d.parseMapData()
+
+		// maybe it's an numbered array i.e. Phone[0].Number
+		if rd := d.findAlias(string(namespace)); rd != nil {
+
+			var varr reflect.Value
+			var kv key
+
+			sl := rd.sliceLen + 1
+
+			// checking below for maxArraySize, but if array exists and already
+			// has sufficient capacity allocated then we do not check as the code
+			// obviously allows a capacity greater than the maxArraySize.
+
+			if v.IsNil() {
+
+				if sl > d.d.maxArraySize {
+					d.setError(namespace, fmt.Errorf(errArraySize, sl, d.d.maxArraySize))
+					return
+				}
+
+				varr = reflect.MakeSlice(v.Type(), sl, sl)
+
+			} else if v.Len() < sl {
+
+				if v.Cap() <= sl {
+
+					if sl > d.d.maxArraySize {
+						d.setError(namespace, fmt.Errorf(errArraySize, sl, d.d.maxArraySize))
+						return
+					}
+
+					varr = reflect.MakeSlice(v.Type(), sl, sl)
+				} else {
+					varr = reflect.MakeSlice(v.Type(), sl, v.Cap())
+				}
+
+				reflect.Copy(varr, v)
+
+			} else {
+				varr = v
+			}
+
+			for i := 0; i < len(rd.keys); i++ {
+
+				kv = rd.keys[i]
+				newVal := reflect.New(varr.Type().Elem()).Elem()
+
+				if kv.ivalue == -1 {
+					d.setError(namespace, fmt.Errorf("Invalid Array index '%s'", kv.value))
+					continue
+				}
+
+				if d.setFieldByType(newVal, append(namespace, kv.searchValue...), 0) {
+					set = true
+					varr.Index(kv.ivalue).Set(newVal)
+				}
+			}
+
+			if !set {
+				return
+			}
+
+			v.Set(varr)
+		}
+
+		return
+	}
+
+	if len(arr) == 0 {
+		return
+	}
+
+	var varr reflect.Value
+	var existing bool
+
+	if v.IsNil() {
+		varr = reflect.MakeSlice(v.Type(), len(arr), len(arr))
+	} else if v.Len() < len(arr) {
+		if v.Cap() <= len(arr) {
+			varr = reflect.MakeSlice(v.Type(), len(arr), len(arr))
+		} else {
+			varr = reflect.MakeSlice(v.Type(), len(arr), v.Cap())
+		}
+		reflect.Copy(varr, v)
+	} else {
+		existing = true
+		varr = v
+	}
+
+	for i := 0; i < len(arr); i++ {
+		newVal := reflect.New(v.Type().Elem()).Elem()
+
+		if d.setFieldByType(newVal, namespace, i) {
+			set = true
+			varr.Index(i).Set(newVal)
+		}
+	}
+
+	if !set || existing {
+		return
+	}
+
+	v.Set(varr)
 	return
 }
 
